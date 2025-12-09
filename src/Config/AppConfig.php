@@ -2,13 +2,14 @@
 
 namespace App\Config;
 
-class Config
+class AppConfig
 {
-    private static array $config = [];
+    private static ?array $config = null;
 
     public static function load(): void
     {
         $configFiles = glob(__DIR__ . '/../../config/*.php');
+        self::$config = [];
         
         foreach ($configFiles as $configFile) {
             $configName = basename($configFile, '.php');
@@ -19,7 +20,7 @@ class Config
 
     public static function get(string $key, $default = null)
     {
-        if (empty(self::$config)) {
+        if (self::$config === null) {
             self::load();
         }
 
@@ -38,7 +39,7 @@ class Config
 
     public static function set(string $key, $value): void
     {
-        if (empty(self::$config)) {
+        if (self::$config === null) {
             self::load();
         }
 

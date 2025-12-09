@@ -20,6 +20,8 @@ class Document
     public string $createdAt;
     public string $updatedAt;
     public ?string $processedAt;
+    public ?string $fullText;
+    public ?string $errorMessage;
 
     public function __construct(
         string $id = null,
@@ -34,7 +36,9 @@ class Document
         array $ocrMetadata = null,
         string $createdAt = null,
         string $updatedAt = null,
-        string $processedAt = null
+        string $processedAt = null,
+        string $fullText = null,
+        string $errorMessage = null
     ) {
         $this->id = $id ?? Uuid::uuid4()->toString();
         $this->uploadedById = $uploadedById;
@@ -49,6 +53,8 @@ class Document
         $this->createdAt = $createdAt ?? (new DateTime())->format('Y-m-d H:i:s');
         $this->updatedAt = $updatedAt ?? (new DateTime())->format('Y-m-d H:i:s');
         $this->processedAt = $processedAt;
+        $this->fullText = $fullText;
+        $this->errorMessage = $errorMessage;
     }
 
     public function isValidStatus(): bool

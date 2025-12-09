@@ -18,7 +18,8 @@
         "elasticsearch/elasticsearch": "^8.11",
         "aws/aws-sdk-php": "^3.290",
         "respect/validation": "^2.2",
-        "promphp/prometheus_client_php": "^2.13"
+        "promphp/prometheus_client_php": "^2.13",
+        "predis/predis": "^2.2"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.5",

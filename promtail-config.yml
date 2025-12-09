@@ -1,0 +1,66 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: document-ocr-api
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: document-ocr-api
+          __path__: /app/storage/logs/laravel.log
+          
+  - job_name: document-ocr-workers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: document-ocr-workers
+          __path__: /app/storage/logs/ocr-worker.log
+          
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/*.log
+          
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          __path__: /var/log/nginx/*.log
+          
+  - job_name: document-search
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: document-search
+          __path__: /app/storage/logs/document-search.log
+          
+  - job_name: document-processing
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: document-processing
+          __path__: /app/storage/logs/document-processing.log
+          
+  - job_name: security
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: security
+          __path__: /app/storage/logs/security.log

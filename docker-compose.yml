@@ -1,0 +1,267 @@
+version: '3.8'
+
+services:
+  # Application Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: document-ocr-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - S3_ENDPOINT=http://minio:9000
+    volumes:
+      - ./:/app
+      - ./storage:/app/storage
+      - ./public:/app/public
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - minio
+    networks:
+      - app-network
+
+  # FrankenPHP with Caddy
+  frankenphp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: document-ocr-frankenphp
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    volumes:
+      - ./:/app
+      - ./storage:/app/storage
+      - ./public:/app/public
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - minio
+    networks:
+      - app-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: document-ocr-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${DB_DATABASE:-document_ocr}
+      - POSTGRES_USER=${DB_USERNAME:-user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-user} -d ${DB_DATABASE:-document_ocr}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis for Caching and Queue
+  redis:
+    image: redis:7-alpine
+    container_name: document-ocr-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Elasticsearch for Search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: document-ocr-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=false
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cat/health >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # MinIO as S3-compatible storage
+  minio:
+    image: minio/minio:latest
+    container_name: document-ocr-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # OCR Workers
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: document-ocr-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - S3_ENDPOINT=http://minio:9000
+    volumes:
+      - ./:/app
+      - ./storage:/app/storage
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - minio
+    networks:
+      - app-network
+    deploy:
+      replicas: 3
+    command: php workers/ocr-worker.php
+
+  # Monitoring Stack - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: document-ocr-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - app-network
+    depends_on:
+      - app
+
+  # Monitoring Stack - Grafana
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: document-ocr-grafana
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - prometheus
+
+  # Logging Stack - Loki
+  loki:
+    image: grafana/loki:latest
+    container_name: document-ocr-loki
+    restart: unless-stopped
+    volumes:
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - app-network
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Logging Stack - Promtail
+  promtail:
+    image: grafana/promtail:latest
+    container_name: document-ocr-promtail
+    restart: unless-stopped
+    volumes:
+      - /var/log:/var/log:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - app-network
+    depends_on:
+      - loki
+
+volumes:
+  postgres_data:
+  redis_data:
+  es_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  app-network:
+    driver: bridge

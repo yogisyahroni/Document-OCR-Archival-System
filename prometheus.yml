@@ -1,0 +1,95 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+scrape_configs:
+  - job_name: 'document-ocr-app'
+    static_configs:
+      - targets: ['app:8000']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    
+  - job_name: 'document-ocr-workers'
+    static_configs:
+      - targets: ['ocr-worker:8000']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+      
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+      
+  - job_name: 'postgresql-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Monitoring rules for Document OCR & Archival System
+groups:
+  - name: document_ocr_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(api_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "API error rate is above 10% for more than 2 minutes"
+          
+      - alert: QueueSizeHigh
+        expr: queue_size{queue_name="document_ocr_queue"} > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing queue is growing"
+          description: "Document OCR queue size is above 100 items for more than 5 minutes"
+          
+      - alert: WorkerDown
+        expr: up{job="document-ocr-workers"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OCR worker is down"
+          description: "An OCR worker has been down for more than 1 minute"
+          
+      - alert: APIResponseTimeHigh
+        expr: histogram_quantile(0.95, http_request_duration_seconds_bucket) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API response time is high"
+          description: "95th percentile of API response time is above 2 seconds"
+          
+      - alert: DocumentProcessingFailed
+        expr: increase(document_processing_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Document processing failed"
+          description: "Document OCR processing has failed in the last 5 minutes"
+          
+      - alert: DatabaseConnectionHighLatency
+        expr: histogram_quantile(0.95, database_connection_duration_seconds_bucket) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection latency is high"
+          description: "95th percentile of database connection latency is above 0.5 seconds"

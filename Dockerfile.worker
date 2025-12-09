@@ -1,0 +1,88 @@
+FROM php:8.2-cli
+
+LABEL maintainer="antigraviti" \
+      description="OCR Worker for Document OCR & Archival System" \
+      version="1.0.0"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    libpq-dev \
+    libssl-dev \
+    libicu-dev \
+    gmp-dev \
+    libldap2-dev \
+    libmemcached-dev \
+    tesseract-ocr \
+    libtesseract-dev \
+    libleptonica-dev \
+    ghostscript \
+    imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-configure pgsql --with-pgsql=/usr/include/pgsql && \
+    docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_pgsql \
+        gd \
+        zip \
+        bcmath \
+        intl \
+        gmp \
+        pcntl \
+        sockets \
+        sysvmsg \
+        sysvsem \
+        sysvshm
+
+# Install additional PHP extensions
+RUN pecl install \
+    redis \
+    && docker-php-ext-enable \
+    redis
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY . /app
+
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader && \
+    composer dump-autoload --optimize
+
+# Create directories for storage and logs
+RUN mkdir -p storage/logs storage/app storage/framework/cache storage/framework/sessions storage/framework/views && \
+    chmod -R 777 storage
+
+# Create non-root user
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -s /bin/sh -d /app app && \
+    chown -R app:app /app
+
+# Switch to non-root user
+USER app
+
+# Set environment variables
+ENV APP_ENV=production \
+    APP_DEBUG=false
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD php artisan health:check || exit 1
+
+# Default command for worker
+CMD ["php", "workers/ocr-worker.php"]

@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'name' => Config::get('app.name', 'Document OCR & Archival System'),
+    'name' => $_ENV['APP_NAME'] ?? 'Document OCR & Archival System',
 
     /*
     |--------------------------------------------------------------------------
@@ -27,7 +27,7 @@ return [
     |
     */
 
-    'env' => Config::get('app.env', 'production'),
+    'env' => $_ENV['APP_ENV'] ?? 'production',
 
     /*
     |--------------------------------------------------------------------------
@@ -40,7 +40,7 @@ return [
     |
     */
 
-    'debug' => Config::get('app.debug', false),
+    'debug' => filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN),
 
     /*
     |--------------------------------------------------------------------------
@@ -53,7 +53,8 @@ return [
     |
     */
 
-    'url' => Config::get('app.url', 'http://localhost'),
+    'url' => $_ENV['APP_URL'] ?? 'http://localhost',
+    'asset_url' => $_ENV['ASSET_URL'] ?? null,
 
     /*
     |--------------------------------------------------------------------------
@@ -118,7 +119,116 @@ return [
     |
     */
 
-    'key' => Config::get('app.key', ''),
+    'key' => $_ENV['APP_KEY'] ?? '',
 
     'cipher' => 'AES-256-CBC',
+
+    /*
+    |--------------------------------------------------------------------------
+    | OCR Configuration
+    |--------------------------------------------------------------------------
+    |
+    | These settings control the OCR processing behavior including the engine
+    | to use, timeout values, and language preferences.
+    |
+    */
+
+    'ocr' => [
+        'engine' => $_ENV['OCR_ENGINE'] ?? 'tesseract',
+        'timeout' => (int) ($_ENV['OCR_TIMEOUT'] ?? 300), // in seconds
+        'language' => $_ENV['OCR_LANGUAGE'] ?? 'eng',
+        'max_file_size' => (int) ($_ENV['OCR_MAX_FILE_SIZE'] ?? 10485760), // 10MB in bytes
+        'supported_formats' => explode(',', $_ENV['OCR_SUPPORTED_FORMATS'] ?? 'pdf,jpg,jpeg,png,tiff'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Configuration
+    |--------------------------------------------------------------------------
+    |
+    | These settings control the queue behavior for background processing
+    | of OCR jobs and other asynchronous tasks.
+    |
+    */
+
+    'queue' => [
+        'default' => $_ENV['QUEUE_CONNECTION'] ?? 'redis',
+        'failed' => [
+            'driver' => $_ENV['QUEUE_FAILED_DRIVER'] ?? 'database',
+            'database' => $_ENV['DB_CONNECTION'] ?? 'pgsql',
+            'table' => 'failed_jobs',
+        ],
+        'ocr_queue' => [
+            'name' => $_ENV['OCR_QUEUE_NAME'] ?? 'ocr_processing',
+            'max_attempts' => (int) ($_ENV['OCR_MAX_ATTEMPTS'] ?? 3),
+            'timeout' => (int) ($_ENV['OCR_JOB_TIMEOUT'] ?? 300), // 5 minutes
+            'retry_delay' => (int) ($_ENV['OCR_RETRY_DELAY'] ?? 60), // 1 minute
+            'batch_size' => (int) ($_ENV['OCR_BATCH_SIZE'] ?? 10),
+            'worker_processes' => (int) ($_ENV['OCR_WORKER_PROCESSES'] ?? 3),
+            'dead_letter_queue' => $_ENV['OCR_DEAD_LETTER_QUEUE'] ?? 'ocr_failed',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | CORS Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Here you may configure your application's Cross-Origin Resource Sharing
+    | settings. This determines what cross-origin operations may execute
+    | in web browsers. You are free to adjust these settings as needed.
+    |
+    */
+
+    'cors' => [
+        'paths' => ['api/*', 'sanctum/csrf-cookie'],
+        'allowed_methods' => ['*'],
+        'allowed_origins' => explode(',', $_ENV['CORS_ALLOWED_ORIGINS'] ?? '*'),
+        'allowed_origins_patterns' => [],
+        'allowed_headers' => ['*'],
+        'exposed_headers' => [],
+        'max_age' => 0,
+        'supports_credentials' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Proxy Configuration
+    |--------------------------------------------------------------------------
+    |
+    | When your application is behind a proxy that terminates SSL/TLS and
+    | maps it to the next proxy or application, you should not trust
+    | that proxy's IP addresses in any way. This directive allows you
+    | to set a whitelist of trusted proxies for your application.
+    |
+    */
+
+    'trustedproxy' => [
+        'proxies' => $_ENV['TRUSTED_PROXIES'] ?? '*',
+        'headers' => (
+            \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_FOR |
+            \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_HOST |
+            \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PORT |
+            \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PROTO |
+            \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_AWS_ELB
+        ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance Mode Driver
+    |--------------------------------------------------------------------------
+    |
+    | These configuration options determine the driver used to determine and
+    | manage Laravel's "maintenance mode" status. The "cache" driver will
+    | allow maintenance mode to be controlled across multiple machines.
+    |
+    | Supported drivers: "file", "cache"
+    |
+    */
+
+    'maintenance' => [
+        'driver' => 'file',
+        // 'store' => 'redis',
+    ],
 ];

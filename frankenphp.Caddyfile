@@ -1,0 +1,20 @@
+{
+    experimental_http3
+    log {
+        output stderr
+        level INFO
+    }
+}
+
+:8000 {
+    encode zstd gzip
+
+    root * public
+    file_server
+
+    php_server {
+        root ../public
+        env APP_ENV production
+        env APP_DEBUG false
+    }
+}

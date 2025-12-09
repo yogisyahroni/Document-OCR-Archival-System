@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Ramsey\Uuid\Uuid;
 use DateTime;
 
 class DocumentCategory

@@ -4,18 +4,19 @@ use App\Config\Config;
 use App\Utils\SimpleContainer;
 use App\Utils\Router;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\ServerRequest;
 
 // Autoload dependencies
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/vendor/autoload.php';
 
 // Initialize environment
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->safeLoad();
 
 // Initialize the configuration
-$configFiles = glob(__DIR__ . '/../config/*.php');
+$configFiles = glob(__DIR__ . '/config/*.php');
 foreach ($configFiles as $configFile) {
     $configName = basename($configFile, '.php');
     $configData = include $configFile;
@@ -53,7 +54,7 @@ $app->singleton(PDO::class, function () {
 
 // S3 Client
 $app->singleton(Aws\S3\S3Client::class, function () {
-    $config = Config::get('s3');
+    $config = Config::get('database.document_storage.s3');
     
     return new Aws\S3\S3Client([
         'version' => 'latest',
